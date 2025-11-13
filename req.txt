@@ -1,0 +1,5 @@
+tensorflow[and-cuda]
+keras
+pandas
+numpy
+matplotlib
