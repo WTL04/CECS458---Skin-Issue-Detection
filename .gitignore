@@ -1,2 +1,3 @@
 venv/
-face_skin_dataset/
+face_skin_yolo/
+*.jpeg
