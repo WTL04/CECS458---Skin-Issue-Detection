@@ -64,8 +64,18 @@
     <div>
         <button id="startBtn">Start Webcam</button>
         <button id="stopBtn">Stop Webcam</button>
+        <!-- capture button -->
+        <button id="captureBtn">Capture &amp; Analyze</button>
     </div>
 
+    <!-- Status text area -->
+    <div id="status"></div>
+
+    <!-- hidden canvas to grab a frame from the video -->
+    <canvas id="snapshot" width="480" height="360" style="display:none;"></canvas>
+
+    <!--where we show detections + GPT routine-->
+    <div id="results"></div>
 
     <script>
         // Get HTML elements
@@ -73,6 +83,8 @@
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
         const statusText = document.getElementById('status');
+        const canvas = document.getElementById('snapshot');
+        const resultsDiv = document.getElementById('results');
 
         // Variable to store webcam stream
         let stream = null;
@@ -115,9 +127,72 @@
             }
         }
 
+        async function captureAndAnalyze() {
+            if (!stream) {
+                statusText.textContent = 'Please start the webcam first.';
+                return;
+            }
+
+            // Draw current frame to the canvas
+            const width = video.videoWidth || 480;
+            const height = video.videoHeight || 360;
+            canvas.width = width;
+            canvas.height = height;
+
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, width, height);
+
+            statusText.textContent = 'Capturing frame and sending to server...';
+            resultsDiv.textContent = '';
+
+            // Convert canvas to blob (image file)
+            canvas.toBlob(async (blob) => {
+                if (!blob) {
+                    statusText.textContent = 'Could not capture image.';
+                    return;
+                }
+
+                try {
+                    const formData = new FormData();
+                    formData.append('file', blob, 'snapshot.png');
+
+                    const response = await fetch('http://127.0.0.1:8000/analyze', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        const detail = errorData.detail || response.statusText;
+                        statusText.textContent = 'Server error: ' + detail;
+                        return;
+                    }
+
+                    const data = await response.json();
+                    statusText.textContent = 'Analysis complete.';
+
+                    // Show results
+                    const detectionLines = (data.detections || []).map(d =>
+                        `- ${d.label} (confidence ${d.confidence.toFixed(2)})`
+                    );
+
+                    const detectionText = detectionLines.length
+                        ? `Detected issues:\n${detectionLines.join('\n')}`
+                        : 'No specific issues detected by the model.';
+
+                    resultsDiv.textContent = detectionText + '\n\n' + data.gpt_routine;
+                } catch (err) {
+                    console.error(err);
+                    statusText.textContent = 'Error contacting server: ' + err.message;
+                }
+            }, 'image/png');
+        }
+
+
         // Button click listeners
         startBtn.addEventListener('click', startWebcam);
         stopBtn.addEventListener('click', stopWebcam);
+        captureBtn.addEventListener('click', captureAndAnalyze);
     </script>
 
 </body>
