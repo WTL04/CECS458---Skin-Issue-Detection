@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from PIL import Image
 from ultralytics import YOLO
 from openai import OpenAI
+from dotenv import load_dotenv
 
 # ---------- Config ----------
 

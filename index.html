@@ -135,6 +135,13 @@
                 padding: 0.75rem;
             }
         }
+
+        /*Results from LLM*/
+        #results {
+          display:flex;
+          align-items: center;
+          justify-content: center;
+        }
     </style>
 </head>
 <body>
@@ -221,8 +228,13 @@
 
         // Function: Capture current frame and send to backend
         async function captureAndAnalyze() {
-            if (!stream) {
-                statusText.textContent = 'Please start the webcam first.';
+
+            const hasWebcam = stream !== null;
+            const hasUpload = fileInput.files && fileInput.files.length > 0;
+
+            // If no webcam and no uploaded file, block capture
+            if (!hasWebcam && !hasUpload) {
+                statusText.textContent = 'Start the webcam or upload an image first.';
                 return;
             }
 

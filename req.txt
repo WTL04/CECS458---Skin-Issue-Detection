@@ -4,8 +4,9 @@ pandas
 numpy
 matplotlib
 ultralytics
-fastapi
+fastapi[standard]
 uvicorn[standard]
 pillow
 python-multipart
 openai>=1.0.0
+python-dotenv
