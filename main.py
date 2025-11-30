@@ -152,7 +152,6 @@ def call_gpt_for_routine(detections: List[Detection]) -> str:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        temperature=0.6,
     )
 
     # Recommended convenience property for plain-text output
