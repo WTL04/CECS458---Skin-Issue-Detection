@@ -1,4 +1,4 @@
-venv/
+.venv/
 face_skin_yolo/
 *.jpeg
 *.zip
