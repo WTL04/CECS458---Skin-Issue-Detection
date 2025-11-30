@@ -19,12 +19,11 @@ from openai import OpenAI
 #   export OPENAI_API_KEY="sk-..."
 client = OpenAI()
 
-# YOLO model path (this is what you already had)
-# You can override with env var YOLO_MODEL_PATH if needed.
+# YOLO model path 
 MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "runs/notebook_train14/weights/best.pt")
 
 # Default model for skincare routine text
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-nano")
 
 
 # ---------- App setup ----------
