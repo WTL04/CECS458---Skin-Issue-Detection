@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
 
-    <!-- Page Title -->
     <title>Skin Health Demo</title>
 
     <style>
@@ -15,39 +14,126 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             min-height: 100vh;
+            padding: 0.75rem 0.75rem 1.25rem;
+            gap: 0.6rem;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.4rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        small {
+            opacity: 0.7;
+            font-size: 0.75rem;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: row;
             gap: 1rem;
+            align-items: flex-start;
+            justify-content: center;
+            flex-wrap: wrap;
+            width: 100%;
+            max-width: 980px;
+        }
+
+        .card {
+            background: #1b1b1b;
+            border-radius: 12px;
+            padding: 0.9rem;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+            border: 1px solid #333;
+            flex: 1 1 300px;
+            max-width: 460px;
         }
 
         /* Webcam video area */
         video {
-            width: 480px;
-            max-width: 90vw;
-            border-radius: 12px;
+            width: 100%;
+            max-width: 440px;
+            max-height: 260px; /* keep video shorter so page fits */
+            border-radius: 10px;
             border: 2px solid #444;
             background: #000;
         }
 
-        /* Buttons for starting/stopping camera */
+        /* Buttons */
         button {
-            padding: 0.5rem 1rem;
-            border-radius: 999px;
+            background: #00b894;
+            color: #0b0b0b;
             border: none;
+            padding: 0.45rem 1.0rem;
+            margin: 0.2rem;
+            border-radius: 999px;
+            font-size: 0.85rem;
             cursor: pointer;
-            font-size: 1rem;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.1s ease;
         }
 
-        /* Start button color */
-        #startBtn { background: #22c55e; }
+        button:hover {
+            background: #00d8aa;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+        }
 
-        /* Stop button color */
-        #stopBtn { background: #ef4444; color: #fff; }
+        button:active {
+            transform: translateY(0);
+            box-shadow: none;
+        }
 
-        /* Status text under the buttons */
         #status {
-            font-size: 0.9rem;
-            opacity: 0.8;
+            min-height: 1.1rem;
+            font-size: 0.8rem;
+            opacity: 0.9;
+            margin-top: 0.35rem;
+        }
+
+        /* Text output area */
+        #results {
+            font-size: 0.85rem;
+            line-height: 1.35;
+            margin-top: 0.75rem; /* gap below the image */
+        }
+
+        #annotatedImage {
+            margin-top: 0.35rem;
+            max-width: 100%;
+            border-radius: 10px;
+            border: 2px solid #444;
+            display: none; /* hidden until we have something */
+        }
+
+        .label {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            color: #bbb;
+            margin-bottom: 0.25rem;
+        }
+
+        /* Extra tightening for shorter screens */
+        @media (max-height: 800px) {
+            body {
+                padding-top: 0.5rem;
+                gap: 0.4rem;
+            }
+            h1 {
+                font-size: 1.25rem;
+            }
+            video {
+                max-height: 230px;
+            }
+            .card {
+                padding: 0.75rem;
+            }
         }
 
         /*Results from LLM*/
@@ -58,43 +144,56 @@
         }
     </style>
 </head>
-
 <body>
 
-    <!-- Page Header -->
     <h1>Skin Health Demo</h1>
+    <small>(Educational only – not medical advice)</small>
 
-    <!-- Video element where the webcam stream will display -->
-    <video id="webcam" autoplay playsinline></video>
-    <label for="face_upload">Upload Image</label>
-    <input type="file" id="face_upload" accept="image/png, image/jpeg"/>
+    <div class="container">
+        <!-- Left card: webcam + controls -->
+        <div class="card">
+            <div class="label">Webcam</div>
+            <video id="webcam" autoplay playsinline></video>
 
-    <!-- Buttons to control webcam -->
-    <div>
-        <button id="startBtn">Start Webcam</button>
-        <button id="stopBtn">Stop Webcam</button>
-        <!-- capture button -->
-        <button id="captureBtn">Capture &amp; Analyze</button>
+            <!-- Buttons to control webcam -->
+            <div style="margin-top:0.6rem;">
+                <button id="startBtn">Start Webcam</button>
+                <button id="stopBtn">Stop Webcam</button>
+                <button id="captureBtn">Capture &amp; Analyze</button>
+            </div>
+
+            <!-- Status text area -->
+            <div id="status"></div>
+
+            <!-- hidden canvas to grab a frame from the video -->
+            <canvas id="snapshot" width="480" height="360" style="display:none;"></canvas>
+        </div>
+
+        <!-- Right card: annotated image FIRST, then text -->
+        <div class="card">
+            <div class="label">Analysis</div>
+
+            <!-- annotated YOLO image at the top -->
+            <img id="annotatedImage" alt="Annotated detection result">
+
+            <!-- markdown-rendered detections + GPT routine below the image -->
+            <div id="results"></div>
+        </div>
     </div>
 
-    <!-- Status text area -->
-    <div id="status"></div>
-
-    <!-- hidden canvas to grab a frame from the video -->
-    <canvas id="snapshot" width="480" height="360" style="display:none;"></canvas>
-
-    <!--where we show detections + GPT routine-->
-    <div id="results"></div>
+    <!-- Markdown parser (Marked.js) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
     <script>
         // Get HTML elements
         const video = document.getElementById('webcam');
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
+        const captureBtn = document.getElementById('captureBtn');
         const statusText = document.getElementById('status');
         const canvas = document.getElementById('snapshot');
         const resultsDiv = document.getElementById('results');
-        const fileInput = document.getElementById('face_upload');
+        const annotatedImg = document.getElementById('annotatedImage');
 
         // Variable to store webcam stream
         let stream = null;
@@ -108,35 +207,26 @@
             }
 
             try {
-                // Ask for permission to access the webcam
                 stream = await navigator.mediaDevices.getUserMedia({ video: true });
-
-                // Connect the video stream to the <video> element
                 video.srcObject = stream;
-
-                // Update status text
-                statusText.textContent = 'Webcam is running.';
+                statusText.textContent = 'Webcam started.';
             } catch (err) {
-                // Display error if permission denied or webcam not available
-                statusText.textContent = 'Could not access webcam: ' + err.message;
+                console.error(err);
+                statusText.textContent = 'Error starting webcam: ' + err.message;
             }
         }
 
-        // Function: Stop webcam properly
+        // Function: Stop webcam
         function stopWebcam() {
             if (stream) {
-                // Stop all tracks (camera turns off)
                 stream.getTracks().forEach(track => track.stop());
-
-                // Remove stream from <video>
-                video.srcObject = null;
                 stream = null;
-
-                // Update text
+                video.srcObject = null;
                 statusText.textContent = 'Webcam stopped.';
             }
         }
 
+        // Function: Capture current frame and send to backend
         async function captureAndAnalyze() {
 
             const hasWebcam = stream !== null;
@@ -158,19 +248,20 @@
             ctx.drawImage(video, 0, 0, width, height);
 
             statusText.textContent = 'Capturing frame and sending to server...';
-            resultsDiv.textContent = '';
+            resultsDiv.innerHTML = '';
+            annotatedImg.style.display = 'none';
 
-            // Convert canvas to blob (image file)
+            // Convert canvas to a blob (PNG) and send via FormData
             canvas.toBlob(async (blob) => {
                 if (!blob) {
-                    statusText.textContent = 'Could not capture image.';
+                    statusText.textContent = 'Could not capture image from webcam.';
                     return;
                 }
 
-                try {
-                    const formData = new FormData();
-                    formData.append('file', blob, 'snapshot.png');
+                const formData = new FormData();
+                formData.append('file', blob, 'snapshot.png');
 
+                try {
                     const response = await fetch('http://127.0.0.1:8000/analyze', {
                         method: 'POST',
                         body: formData
@@ -186,23 +277,37 @@
                     const data = await response.json();
                     statusText.textContent = 'Analysis complete.';
 
-                    // Show results
+                    // Build detection markdown (bullet list)
                     const detectionLines = (data.detections || []).map(d =>
                         `- ${d.label} (confidence ${d.confidence.toFixed(2)})`
                     );
 
                     const detectionText = detectionLines.length
-                        ? `Detected issues:\n${detectionLines.join('\n')}`
+                        ? `**Detected issues:**\n\n${detectionLines.join('\n')}`
                         : 'No specific issues detected by the model.';
 
-                    resultsDiv.textContent = detectionText + '\n\n' + data.gpt_routine;
+                    const routineText = data.gpt_routine || '';
+
+                    // Combine detections + GPT routine as markdown
+                    const combinedMarkdown = detectionText + '\n\n' + routineText;
+
+                    // Render markdown to HTML
+                    resultsDiv.innerHTML = marked.parse(combinedMarkdown);
+
+                    // Show annotated image if present (this is now at the top)
+                    if (data.annotated_image) {
+                        annotatedImg.src = `data:image/png;base64,${data.annotated_image}`;
+                        annotatedImg.style.display = 'block';
+                    } else {
+                        annotatedImg.style.display = 'none';
+                    }
+
                 } catch (err) {
                     console.error(err);
                     statusText.textContent = 'Error contacting server: ' + err.message;
                 }
             }, 'image/png');
         }
-
 
         // Button click listeners
         startBtn.addEventListener('click', startWebcam);
