@@ -23,7 +23,7 @@ client = OpenAI()
 MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "runs/notebook_train14/weights/best.pt")
 
 # Default model for skincare routine text
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-nano")
 
 
 # ---------- App setup ----------
