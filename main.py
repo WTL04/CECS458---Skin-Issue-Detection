@@ -22,7 +22,7 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # YOLO model path 
-MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "runs/skin_yolo_run13_relabeled_dataset/weights/best.pt")
+MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "runs/skin_yolo_run_relabeled_dataset/weights/best.pt")
 
 # Default model for skincare routine text
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-nano")
