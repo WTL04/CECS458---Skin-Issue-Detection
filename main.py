@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-MODEL_PATH = "runs/notebook_train14/weights/best.pt"  # update if needed
+MODEL_PATH = "runs/skin_yolo_run13 (small dataset)/weights/best.pt"  # update if needed
 
 # ---------- App setup ----------
 app = FastAPI(title="Skin Issue Detection API")
