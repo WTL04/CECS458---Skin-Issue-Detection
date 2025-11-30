@@ -15,13 +15,14 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 # ---------- Config ----------
+# Make sure OPENAI_API_KEY is set in your environment
+# e.g., export OPENAI_API_KEY="sk-..."
 
-# Uses OPENAI_API_KEY from your environment by default
-#   export OPENAI_API_KEY="sk-..."
-client = OpenAI()
+load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # YOLO model path 
-MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "runs/notebook_train14/weights/best.pt")
+MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "runs/skin_yolo_run13_relabeled_dataset/weights/best.pt")
 
 # Default model for skincare routine text
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-nano")
@@ -133,19 +134,33 @@ def call_gpt_for_routine(detections: List[Detection]) -> str:
 
     system_prompt = (
         "You are a cautious skincare educator. "
-        "You can talk about general skincare routines and over-the-counter product categories. "
-        "Do NOT diagnose health conditions or mention prescription drugs. "
-        "Always remind the user to consult a dermatologist or other healthcare professional for diagnosis and treatment."
+        "Your job is to explain, in simple and accessible language, what common skin concerns might mean "
+        "and offer basic over-the-counter skincare approaches that can help improve their appearance. "
+        "You may mention what ingredients or product types are typically used for these concerns, "
+        "but you must not provide medical diagnoses or prescription guidance. "
+        "Always remind the user to consult a dermatologist or licensed professional for diagnosis or persistent issues. "
     )
+
 
     user_prompt = (
         f"{detected_text}\n\n"
-        "Based on these possible skin issues, suggest a simple morning and night routine "
-        "using only general, over-the-counter skincare product categories "
-        "(like gentle cleanser, non-comedogenic moisturizer, sunscreen, etc.). "
-        "For each step, briefly explain what it does. "
-        "End with a clear disclaimer that this is not a diagnosis and they should consult a professional."
+        "For each detected issue, respond in a very concise, bullet based format.\n"
+        "Use the structure below and keep the total answer for each issue under about 200 words.\n\n"
+        "1) Short explanation (1–2 sentences max) of what people usually mean by this concern. "
+        "Avoid diagnosing or naming medical conditions.\n\n"
+        "2) Key ingredients (bullet list, max 3 items). For each item, use the format:\n"
+        "   - Ingredient: one short clause on why it helps.\n\n"
+        "3) Example products (bullet list, max 3 items). For each item, use the format:\n"
+        "   - Brand, Product name (contains [ingredient]).\n"
+        "   Use only widely available over the counter brands and treat them as examples, not endorsements.\n\n"
+        "4) Simple routine (bullets only):\n"
+        "   - Morning: 2–3 short steps focused on this issue.\n"
+        "   - Evening: 2–3 short steps focused on this issue.\n\n"
+        "5) Mistakes to avoid (bullet list, max 2 items) related specifically to this issue.\n\n"
+        "Use clear markdown bullets, avoid long paragraphs, and do not repeat the same explanation across issues. "
+        "Finish with one short sentence that clearly states this is not a diagnosis and that they should see a professional for persistent or severe concerns."
     )
+
 
     response = client.responses.create(
         model=OPENAI_MODEL,

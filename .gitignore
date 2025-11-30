@@ -2,6 +2,8 @@
 face_skin_yolo/
 *.jpeg
 *.zip
+skin_dataset/
+skin_dataset_v1/
 skin_dataset_v2/
 skin_dataset_v3/
 __pycache__/

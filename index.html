@@ -135,14 +135,7 @@
                 padding: 0.75rem;
             }
         }
-
-        /*Results from LLM*/
-        #results {
-          display:flex;
-          align-items: center;
-          justify-content: center;
-        }
-    </style>
+   </style>
 </head>
 <body>
 
@@ -154,6 +147,8 @@
         <div class="card">
             <div class="label">Webcam</div>
             <video id="webcam" autoplay playsinline></video>
+            <label for="fileInput">Upload an Image:</label>
+            <input type="file" id="fileInput" accept="image/png, image/jpeg"/>
 
             <!-- Buttons to control webcam -->
             <div style="margin-top:0.6rem;">
@@ -194,6 +189,7 @@
         const canvas = document.getElementById('snapshot');
         const resultsDiv = document.getElementById('results');
         const annotatedImg = document.getElementById('annotatedImage');
+        const fileInput = document.getElementById('fileInput');
 
         // Variable to store webcam stream
         let stream = null;
@@ -226,19 +222,74 @@
             }
         }
 
-        // Function: Capture current frame and send to backend
-        async function captureAndAnalyze() {
+        // Function: Sends file upload to backend
+        async function sendToBackend(fileLike) {
+            statusText.textContent = 'Sending image to server...';
+            resultsDiv.innerHTML = '';
+            annotatedImg.style.display = 'none';
 
+            const formData = new FormData();
+            formData.append('file', fileLike, 'image.png');
+
+            try {
+                const response = await fetch('http://127.0.0.1:8000/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    const detail = errorData.detail || response.statusText;
+                    statusText.textContent = 'Server error: ' + detail;
+                    return;
+                }
+
+                const data = await response.json();
+                statusText.textContent = 'Analysis complete.';
+
+                const detectionLines = (data.detections || []).map(d =>
+                    `- ${d.label} (confidence ${d.confidence.toFixed(2)})`
+                );
+
+                const detectionText = detectionLines.length
+                    ? `**Detected issues:**\n\n${detectionLines.join('\n')}`
+                    : 'No specific issues detected by the model.';
+
+                const routineText = data.gpt_routine || '';
+                const combinedMarkdown = detectionText + '\n\n' + routineText;
+
+                resultsDiv.innerHTML = marked.parse(combinedMarkdown);
+
+                if (data.annotated_image) {
+                    annotatedImg.src = `data:image/png;base64,${data.annotated_image}`;
+                    annotatedImg.style.display = 'block';
+                } else {
+                    annotatedImg.style.display = 'none';
+                }
+            } catch (err) {
+                console.error(err);
+                statusText.textContent = 'Error contacting server: ' + err.message;
+            }
+        }
+
+        // Function: Sends file or captures current frame from webcam to backend 
+        async function captureAndAnalyze() {
             const hasWebcam = stream !== null;
             const hasUpload = fileInput.files && fileInput.files.length > 0;
 
-            // If no webcam and no uploaded file, block capture
             if (!hasWebcam && !hasUpload) {
                 statusText.textContent = 'Start the webcam or upload an image first.';
                 return;
             }
 
-            // Draw current frame to the canvas
+            // If user uploaded an image, send that directly
+            if (hasUpload) {
+                const file = fileInput.files[0];
+                await sendToBackend(file);
+                return;
+            }
+
+            // Otherwise capture from webcam
             const width = video.videoWidth || 480;
             const height = video.videoHeight || 360;
             canvas.width = width;
@@ -247,65 +298,12 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(video, 0, 0, width, height);
 
-            statusText.textContent = 'Capturing frame and sending to server...';
-            resultsDiv.innerHTML = '';
-            annotatedImg.style.display = 'none';
-
-            // Convert canvas to a blob (PNG) and send via FormData
             canvas.toBlob(async (blob) => {
                 if (!blob) {
                     statusText.textContent = 'Could not capture image from webcam.';
                     return;
                 }
-
-                const formData = new FormData();
-                formData.append('file', blob, 'snapshot.png');
-
-                try {
-                    const response = await fetch('http://127.0.0.1:8000/analyze', {
-                        method: 'POST',
-                        body: formData
-                    });
-
-                    if (!response.ok) {
-                        const errorData = await response.json().catch(() => ({}));
-                        const detail = errorData.detail || response.statusText;
-                        statusText.textContent = 'Server error: ' + detail;
-                        return;
-                    }
-
-                    const data = await response.json();
-                    statusText.textContent = 'Analysis complete.';
-
-                    // Build detection markdown (bullet list)
-                    const detectionLines = (data.detections || []).map(d =>
-                        `- ${d.label} (confidence ${d.confidence.toFixed(2)})`
-                    );
-
-                    const detectionText = detectionLines.length
-                        ? `**Detected issues:**\n\n${detectionLines.join('\n')}`
-                        : 'No specific issues detected by the model.';
-
-                    const routineText = data.gpt_routine || '';
-
-                    // Combine detections + GPT routine as markdown
-                    const combinedMarkdown = detectionText + '\n\n' + routineText;
-
-                    // Render markdown to HTML
-                    resultsDiv.innerHTML = marked.parse(combinedMarkdown);
-
-                    // Show annotated image if present (this is now at the top)
-                    if (data.annotated_image) {
-                        annotatedImg.src = `data:image/png;base64,${data.annotated_image}`;
-                        annotatedImg.style.display = 'block';
-                    } else {
-                        annotatedImg.style.display = 'none';
-                    }
-
-                } catch (err) {
-                    console.error(err);
-                    statusText.textContent = 'Error contacting server: ' + err.message;
-                }
+                await sendToBackend(blob);
             }, 'image/png');
         }
 
