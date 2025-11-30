@@ -12,11 +12,14 @@ from PIL import Image
 from ultralytics import YOLO
 
 from openai import OpenAI
+from dotenv import load_dotenv
 
 # ---------- Config ----------
 # Make sure OPENAI_API_KEY is set in your environment
 # e.g., export OPENAI_API_KEY="sk-..."
-client = OpenAI()
+
+load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 MODEL_PATH = "runs/notebook_train14/weights/best.pt"  # update if needed
 
@@ -109,6 +112,7 @@ def call_gpt_for_routine(detections: List[Detection]) -> str:
         "suggest a simple morning and night skincare routine, plus a short explanation "
         "of what each step does. Assume the user is an adult with no known medical conditions. "
         "Keep it concise and easy to understand."
+        "First state what was the detected problem, explain what are the common causes of the problem is "
     )
 
     completion = client.chat.completions.create(

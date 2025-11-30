@@ -49,6 +49,13 @@
             font-size: 0.9rem;
             opacity: 0.8;
         }
+
+        /*Results from LLM*/
+        #results {
+          display:flex;
+          align-items: center;
+          justify-content: center;
+        }
     </style>
 </head>
 
@@ -59,6 +66,8 @@
 
     <!-- Video element where the webcam stream will display -->
     <video id="webcam" autoplay playsinline></video>
+    <label for="face_upload">Upload Image</label>
+    <input type="file" id="face_upload" accept="image/png, image/jpeg"/>
 
     <!-- Buttons to control webcam -->
     <div>
@@ -85,6 +94,7 @@
         const statusText = document.getElementById('status');
         const canvas = document.getElementById('snapshot');
         const resultsDiv = document.getElementById('results');
+        const fileInput = document.getElementById('face_upload');
 
         // Variable to store webcam stream
         let stream = null;
@@ -128,8 +138,13 @@
         }
 
         async function captureAndAnalyze() {
-            if (!stream) {
-                statusText.textContent = 'Please start the webcam first.';
+
+            const hasWebcam = stream !== null;
+            const hasUpload = fileInput.files && fileInput.files.length > 0;
+
+            // If no webcam and no uploaded file, block capture
+            if (!hasWebcam && !hasUpload) {
+                statusText.textContent = 'Start the webcam or upload an image first.';
                 return;
             }
 

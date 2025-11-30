@@ -5,3 +5,5 @@ face_skin_yolo/
 skin_dataset/
 __pycache__/
 .vscode/
+.env
+.ipynb_checkpoints/
