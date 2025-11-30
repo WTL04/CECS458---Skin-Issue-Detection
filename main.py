@@ -18,7 +18,7 @@ from openai import OpenAI
 # e.g., export OPENAI_API_KEY="sk-..."
 client = OpenAI()
 
-MODEL_PATH = "skin_yolo.pt"  # update if needed
+MODEL_PATH = "runs/notebook_train14/weights/best.pt"  # update if needed
 
 # ---------- App setup ----------
 app = FastAPI(title="Skin Issue Detection API")
