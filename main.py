@@ -2,43 +2,56 @@
 
 import io
 import os
-from typing import List
+import base64
+from typing import List, Tuple
 
+import numpy as np
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-
 from PIL import Image
 from ultralytics import YOLO
-
 from openai import OpenAI
 
 # ---------- Config ----------
-# Make sure OPENAI_API_KEY is set in your environment
-# e.g., export OPENAI_API_KEY="sk-..."
+
+# Uses OPENAI_API_KEY from your environment by default
+#   export OPENAI_API_KEY="sk-..."
 client = OpenAI()
 
-MODEL_PATH = "runs/notebook_train14/weights/best.pt"  # update if needed
+# YOLO model path (this is what you already had)
+# You can override with env var YOLO_MODEL_PATH if needed.
+MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "runs/notebook_train14/weights/best.pt")
+
+# Default model for skincare routine text
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+
 
 # ---------- App setup ----------
+
 app = FastAPI(title="Skin Issue Detection API")
 
-# CORS so your frontend (http://localhost:8000 or 5500 etc.) can call the API
+# CORS so your frontend (http://localhost:5500, 8000, etc.) can call this backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],    # tighten this later if you want
+    allow_origins=["*"],  # in production, restrict to your real frontend origin
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
 # ---------- Load YOLO model once ----------
+
 try:
     yolo_model = YOLO(MODEL_PATH)
+    print(f"✅ Loaded YOLO model from {MODEL_PATH}")
 except Exception as e:
-    print(f"Error loading YOLO model from {MODEL_PATH}: {e}")
+    print(f"❌ Error loading YOLO model from {MODEL_PATH}: {e}")
     yolo_model = None
 
+
+# ---------- Pydantic models ----------
 
 class Detection(BaseModel):
     label: str
@@ -48,99 +61,142 @@ class Detection(BaseModel):
 class AnalyzeResponse(BaseModel):
     detections: List[Detection]
     gpt_routine: str
+    annotated_image: str  # base64-encoded PNG of the annotated image
 
 
-def run_yolo_on_image(pil_image: Image.Image) -> List[Detection]:
+# ---------- Helper functions ----------
+
+def run_yolo_on_image(pil_image: Image.Image) -> Tuple[List[Detection], str]:
     """
-    Run YOLO on the image and return a list of detection objects.
+    Run YOLO on the image and return:
+      - list of Detection objects
+      - base64 PNG string of the annotated image
     """
     if yolo_model is None:
         raise RuntimeError("YOLO model not loaded")
 
-    results = yolo_model(pil_image, verbose=False)
+    # Run YOLO
+    results = yolo_model(pil_image)
     detections: List[Detection] = []
 
     if not results:
-        return detections
+        # No results from the model: just return original image as "annotated"
+        buf = io.BytesIO()
+        pil_image.save(buf, format="PNG")
+        annotated_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+        return detections, annotated_b64
 
     result = results[0]
     boxes = result.boxes
-
-    if boxes is None or boxes.data is None:
-        return detections
-
     names = yolo_model.names  # class index -> label string
 
-    for box in boxes:
-        cls_idx = int(box.cls.item())
-        conf = float(box.conf.item())
-        label = names.get(cls_idx, f"class_{cls_idx}")
-        detections.append(Detection(label=label, confidence=conf))
+    # Extract detections
+    if boxes is not None and boxes.data is not None:
+        for box in boxes:
+            cls_idx = int(box.cls.item())
+            conf = float(box.conf.item())
+            label = names.get(cls_idx, f"class_{cls_idx}")
+            detections.append(Detection(label=label, confidence=conf))
 
-    return detections
+    # Create annotated image using YOLO's built-in plotting
+    plotted = result.plot()  # NumPy array (BGR)
+
+    if isinstance(plotted, np.ndarray):
+        # Convert BGR -> RGB then to PIL
+        annotated_pil = Image.fromarray(plotted[..., ::-1])
+    else:
+        # Fallback: if something weird happens, just use original image
+        annotated_pil = pil_image
+
+    buf = io.BytesIO()
+    annotated_pil.save(buf, format="PNG")
+    annotated_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+    return detections, annotated_b64
 
 
 def call_gpt_for_routine(detections: List[Detection]) -> str:
     """
-    Turn detections into a high-level text description and ask GPT
-    for an educational skincare routine (with disclaimers).
+    Turn YOLO detections into a high-level text description and
+    ask the OpenAI model for a gentle, non-diagnostic skincare routine.
     """
 
     if not detections:
-        detected_text = "The model did not detect any specific skin issues."
-    else:
-        # e.g. "acne (0.87), redness (0.75)"
-        issues = ", ".join(
-            f"{d.label} (confidence {d.confidence:.2f})" for d in detections
+        detected_text = (
+            "The model did not detect any specific skin issues with high confidence."
         )
-        detected_text = f"The model detected these visible skin issues: {issues}."
+    else:
+        issues = ", ".join(
+            f"{d.label} ({d.confidence:.2f})" for d in detections
+        )
+        detected_text = f"The model detected the following possible skin issues: {issues}."
 
     system_prompt = (
         "You are a cautious skincare educator. "
         "You can talk about general skincare routines and over-the-counter product categories. "
-        "Do NOT diagnose diseases or suggest prescription-only treatments. "
-        "Always include a clear disclaimer that this information is not medical advice "
-        "and that the user should see a dermatologist or healthcare professional for diagnosis or treatment."
+        "Do NOT diagnose health conditions or mention prescription drugs. "
+        "Always remind the user to consult a dermatologist or other healthcare professional for diagnosis and treatment."
     )
 
     user_prompt = (
         f"{detected_text}\n\n"
-        "Using only general skincare knowledge and non-prescription product categories, "
-        "suggest a simple morning and night skincare routine, plus a short explanation "
-        "of what each step does. Assume the user is an adult with no known medical conditions. "
-        "Keep it concise and easy to understand."
+        "Based on these possible skin issues, suggest a simple morning and night routine "
+        "using only general, over-the-counter skincare product categories "
+        "(like gentle cleanser, non-comedogenic moisturizer, sunscreen, etc.). "
+        "For each step, briefly explain what it does. "
+        "End with a clear disclaimer that this is not a diagnosis and they should consult a professional."
     )
 
-    completion = client.chat.completions.create(
-        model="gpt-4o-mini",  # or another model your class allows
-        messages=[
+    response = client.responses.create(
+        model=OPENAI_MODEL,
+        input=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
         temperature=0.6,
     )
 
-    return completion.choices[0].message.content.strip()
+    # Recommended convenience property for plain-text output
+    text = getattr(response, "output_text", None)
+    if isinstance(text, str) and text.strip():
+        return text.strip()
 
+    # Fallback in case output_text is missing/empty
+    try:
+        first = response.output[0].content[0].text
+        value = getattr(first, "value", None)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    except Exception:
+        pass
+
+    return (
+        "Sorry, I couldn't generate a skincare routine right now. "
+        "Please try again later or consult a dermatologist for personalized advice."
+    )
+
+
+# ---------- FastAPI endpoint ----------
 
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_image(file: UploadFile = File(...)):
     """
-    Accepts an image (from webcam snapshot), runs YOLO, then asks GPT for a routine.
+    Accepts an image (from webcam snapshot), runs YOLO,
+    then asks GPT for a routine and returns everything.
     """
-
     if file.content_type is None or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Please upload an image file.")
 
+    # Read and open the image
     try:
         contents = await file.read()
         image = Image.open(io.BytesIO(contents)).convert("RGB")
     except Exception:
         raise HTTPException(status_code=400, detail="Could not read image file.")
 
-    # YOLO detections
+    # YOLO detections + annotated image
     try:
-        detections = run_yolo_on_image(image)
+        detections, annotated_b64 = run_yolo_on_image(image)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"YOLO inference error: {e}")
 
@@ -150,4 +206,8 @@ async def analyze_image(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM error: {e}")
 
-    return AnalyzeResponse(detections=detections, gpt_routine=routine)
+    return AnalyzeResponse(
+        detections=detections,
+        gpt_routine=routine,
+        annotated_image=annotated_b64,
+    )
