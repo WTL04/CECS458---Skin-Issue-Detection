@@ -92,13 +92,13 @@
 
         /* Text output area */
         #results {
-            white-space: pre-line; /* keep line breaks from JS */
             font-size: 0.95rem;
             line-height: 1.4;
+            margin-top: 1rem; /* gap below the image */
         }
 
         #annotatedImage {
-            margin-top: 1rem;
+            margin-top: 0.5rem;
             max-width: 100%;
             border-radius: 12px;
             border: 2px solid #444;
@@ -144,16 +144,20 @@
             <canvas id="snapshot" width="480" height="360" style="display:none;"></canvas>
         </div>
 
-        <!-- Right card: results + annotated image -->
+        <!-- Right card: annotated image FIRST, then text -->
         <div class="card">
             <div class="label">Analysis</div>
-            <!-- where we show detections + GPT routine -->
-            <div id="results"></div>
 
-            <!-- annotated YOLO image -->
+            <!-- annotated YOLO image at the top -->
             <img id="annotatedImage" alt="Annotated detection result">
+
+            <!-- markdown-rendered detections + GPT routine below the image -->
+            <div id="results"></div>
         </div>
     </div>
+
+    <!-- Markdown parser (Marked.js) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
     <script>
         // Get HTML elements
@@ -214,7 +218,7 @@
             ctx.drawImage(video, 0, 0, width, height);
 
             statusText.textContent = 'Capturing frame and sending to server...';
-            resultsDiv.textContent = '';
+            resultsDiv.innerHTML = '';
             annotatedImg.style.display = 'none';
 
             // Convert canvas to a blob (PNG) and send via FormData
@@ -243,20 +247,24 @@
                     const data = await response.json();
                     statusText.textContent = 'Analysis complete.';
 
-                    // Show results text
+                    // Build detection markdown (bullet list)
                     const detectionLines = (data.detections || []).map(d =>
                         `- ${d.label} (confidence ${d.confidence.toFixed(2)})`
                     );
 
                     const detectionText = detectionLines.length
-                        ? `Detected issues:\n${detectionLines.join('\n')}`
+                        ? `**Detected issues:**\n\n${detectionLines.join('\n')}`
                         : 'No specific issues detected by the model.';
 
                     const routineText = data.gpt_routine || '';
 
-                    resultsDiv.textContent = detectionText + '\n\n' + routineText;
+                    // Combine detections + GPT routine as markdown
+                    const combinedMarkdown = detectionText + '\n\n' + routineText;
 
-                    // Show annotated image if present
+                    // Render markdown to HTML
+                    resultsDiv.innerHTML = marked.parse(combinedMarkdown);
+
+                    // Show annotated image if present (this is now at the top)
                     if (data.annotated_image) {
                         annotatedImg.src = `data:image/png;base64,${data.annotated_image}`;
                         annotatedImg.style.display = 'block';
